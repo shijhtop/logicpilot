@@ -13,8 +13,9 @@ do the first three.
    VHDL). End with an explicit PASS line and `$finish`/`std.env.finish`.
 4. Dump a waveform for debugging when it fails.
 
-The flow's `sim` stage keys off both the exit code and the PASS/FAIL line — a TB
-that drives signals but checks nothing will "pass" while hiding bugs.
+The regression command must check both the process result and an explicit
+PASS/FAIL outcome. A TB that drives signals but checks nothing can appear to
+pass while hiding bugs.
 
 ## Scaling up: the scoreboard pattern
 

@@ -64,9 +64,8 @@ are tractable:
 
 ## Integration with `cdc-inventory.json`
 
-LogicPilot's `cdc-check` stage validates the architectural inventory
-(payload × synchronizer × verdict). A `verdict: "waived"` row in the
-inventory is the equivalent of an architectural waiver above:
+When a project maintains a CDC inventory, a `verdict: "waived"` row is the
+equivalent of an architectural waiver above:
 `rationale` + `evidence` are mandatory. Tool-level waivers (rule-id
 scoped, vendor-specific) live in vendor TCL / config files, not in the
 inventory.

@@ -71,7 +71,8 @@ your simulator, fix, re-prove.
 Prove two representations are logically identical — RTL vs synthesized netlist,
 or pre- vs post-optimization. Combinational equivalence (CEC) and sequential
 equivalence (SEC) are provided by ABC (inside Yosys) and by the `equiv_*`
-commands; the flow's `lec` stage uses `equiv_make`/`equiv_simple`/`equiv_status
--assert`. This catches synthesis/optimization bugs that GLS might miss, and is
-faster than re-running the full testbench on the netlist. Note `equiv` is
-combinational-scope; retiming/sequential changes need SEC or GLS to catch.
+commands. A Yosys CEC command can use
+`equiv_make`/`equiv_simple`/`equiv_status -assert`. This catches
+synthesis/optimization bugs that GLS might miss and is faster than re-running
+the full testbench on the netlist. Note `equiv` is combinational-scope;
+retiming/sequential changes need SEC or GLS to catch.

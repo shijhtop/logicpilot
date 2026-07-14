@@ -1,8 +1,6 @@
-# Codex-specific metadata (ignored by Claude Code and other agents).
+# Codex-specific skill metadata.
 interface:
-  display_name: "Hardware Synthesis"
-  short_description: "Synthesize RTL and report utilization"
+  display_name: "Hardware Synthesis & FPGA"
+  short_description: "Synthesize, read reports, optimize FPGA RTL"
 policy:
-  # implicit = Codex may auto-trigger from a matching prompt;
-  # explicit-only (hardware-synthesis) for slow/expensive stages.
   allow_implicit_invocation: true

@@ -27,34 +27,6 @@ size, the team's language, and whether VIP reuse across projects is a real need.
 ## cocotb shape (for reference)
 
 A cocotb test is a Python coroutine that awaits clock edges and drives/reads DUT
-signals; the "expected" result comes from plain Python. To wire it into this
-flow, add a `sim` candidate whose `cmd` invokes the cocotb makefile/runner with
-the project's simulator, and keep the Python reference model under `tb/`.
-
----
-
-# Gate-Level Simulation & X Handling
-
-(Reference for RTL-stage authors to preempt X traps before the design
-hands off to back-end GLS.)
-
-## Why GLS finds bugs RTL sim doesn't
-
-- **X-optimism (RTL):** RTL `if`/`case` can resolve an unknown `x` optimistically
-  (e.g., taking a branch) so sim looks fine, while the gate netlist propagates
-  the X and exposes that some state was never properly reset/initialized.
-- **X-pessimism (gates):** conversely the gate model can show X where real
-  silicon would resolve — usually a reset/init gap to fix, not a tool bug.
-- **Init/reset differences:** FPGA FFs may power up to a defined value the RTL
-  assumed via `initial`; if reset doesn't cover that state, GLS diverges.
-- **SDF-annotated GLS:** with timing back-annotation, setup/hold violations show
-  as Xs at the violating registers — that's a *timing* problem (send back to
-  timing closure), not a functional one.
-
-## Method
-
-Run the same testbench against the synthesized netlist + cell models. A mismatch
-that passed at RTL almost always means: incomplete reset, reliance on `initial`
-that didn't carry, an X masked in the TB, or (with SDF) a timing violation. Fix
-the reset/init in RTL — never mask the X in the testbench. Use equivalence
-checking (see assertions-and-formal) as a faster complementary sign-off.
+signals; the "expected" result comes from plain Python. Invoke it through the
+project's cocotb makefile/runner with the selected simulator, and keep the
+Python reference model under `tb/`.

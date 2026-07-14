@@ -1,6 +1,6 @@
-# Codex-specific metadata (ignored by Claude Code and other agents).
+# Codex-specific skill metadata.
 interface:
-  display_name: "Hardware CDC/RDC Review"
-  short_description: "Structural review of clock/reset-domain crossings"
+  display_name: "Hardware CDC/RDC & Reset"
+  short_description: "Review clocks, resets, CDC, and RDC structure"
 policy:
   allow_implicit_invocation: true

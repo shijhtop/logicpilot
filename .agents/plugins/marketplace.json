@@ -18,6 +18,6 @@
     }
   ],
   "metadata": {
-    "description": "LogicPilot marketplace: SV/RTL design, source/TB audit, verification, synthesis, power analysis, reports, FPGA/ASIC flows."
+    "description": "LogicPilot marketplace: focused RTL/HDL front-end design, audit, verification, CDC, constraints, synthesis, and reporting."
   }
 }

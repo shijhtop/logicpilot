@@ -16,13 +16,11 @@ always @(posedge dclk or negedge drst_n)
 wire dst_in = sync[1];
 ```
 
-Rules: source must be **wide enough to span at least one full
-destination clock period plus setup/hold** — commonly stated as
-≥1.5 destination periods as a design rule, ≥2 destination periods as
-the safe floor when source / dest periods are similar. No combinational
-logic on `async_in`. Add a third stage for very high-frequency
-destinations or to lower MTBF further. Exact margin is PVT / library
-dependent; defer to project CDC sign-off when budget is tight.
+Rules: a level crossing must remain stable long enough for the destination to
+observe it under the project's worst-case clock phase, uncertainty, and
+setup/hold assumptions. If that cannot be proved, use a toggle or closed-loop
+handshake. Put no combinational logic on `async_in`. Add synchronizer stages
+only from an MTBF calculation or project CDC policy.
 
 ## A short event/pulse → pulse (toggle) synchronizer
 
@@ -35,9 +33,12 @@ far enough apart for the destination to see each toggle.
 
 - **Async FIFO**: dual-port RAM with **Gray-coded** read/write pointers; only the
   pointers cross domains. Gray code has **code distance 1** — exactly one bit
-  changes per increment — so a 2-FF sync of the pointer can only ever be "one
-  count behind," never a garbage intermediate value. Use for streaming /
-  rate-decoupling. Two subtleties that bite real designs:
+  changes per source increment. A slow destination may observe a value stale by
+  multiple source increments or skip intermediate codes; this is expected. Gray
+  coding does not constrain physical routing skew, so apply the target flow's
+  max-delay and/or bus-skew constraint to prevent bits from multiple source
+  increments being observed as a mixed code word. Use for streaming and rate
+  decoupling. Three subtleties that bite real designs:
   - **Register the Gray pointer before resynchronizing.** The Gray pointer
     must be the **registered output** of the binary→Gray combinational logic,
     not the raw combinational output. Sampling the unregistered combinational
@@ -47,6 +48,9 @@ far enough apart for the destination to see each toggle.
     reset) domains; if one side leaves reset before the other, stale data can be
     read. Reset both pointer logic consistently (e.g. async-assert/sync-deassert
     per domain) so the FIFO comes up empty on both sides.
+  - **Constraint verification.** Inspect the implementation tool's exception and
+    skew reports; do not assume a blanket asynchronous clock group preserves a
+    path-specific pointer bound.
 - **Req/ack handshake**: source drives data + `req`, holds both stable; `req` is
   synchronized to the destination; destination latches data and returns `ack`;
   `ack` is synchronized back. Slower (round-trip latency) but cheap for
@@ -75,8 +79,9 @@ cycles and miss the transaction.
   **unsynchronized but held stable** in the source, and synchronize a single
   load-enable through 2–3 FFs. The destination only latches data after the
   enable pulse propagates, so the multi-bit value is guaranteed stable by
-  then. Constrain the data path with `set_max_delay` (≤ source period) so
-  STA bounds the skew the destination tolerates.
+  then. Constrain the data path with a protocol- and tool-appropriate max-delay
+  and/or bus-skew bound so implementation preserves the assumed stability
+  window.
 
 ## Reset-domain crossing (RDC)
 

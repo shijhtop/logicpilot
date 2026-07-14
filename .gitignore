@@ -5,10 +5,6 @@ __pycache__/
 *.egg-info/
 dist/
 .DS_Store
-shared/flow/demo*/build/
-shared/flow/demo/build/
 *.vcd
 *.saif
 *.log
-# Test fixture logs are tracked; they're not generated artefacts.
-!**/tests/fixtures/**/*.log

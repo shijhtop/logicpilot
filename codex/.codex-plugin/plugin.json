@@ -1,13 +1,12 @@
 {
   "name": "logicpilot",
   "version": "0.0.0",
-  "description": "Front-end-first LogicPilot workflow: RTL/SV design and modeling, source/TB audit, synthesizable coding, lint, simulation, verification, synthesis, power analysis, constraints, CDC, interfaces, and optional FPGA/ASIC back-end.",
+  "description": "Codex-native RTL/HDL design and review skills.",
   "author": {
     "name": "LogicPilot Maintainers"
   },
   "license": "MIT",
   "keywords": [
-    "asic",
     "cdc",
     "coverage",
     "eda",
@@ -16,19 +15,16 @@
     "fsm",
     "hdl",
     "logicpilot",
-    "power",
     "randomization",
     "rdc",
     "report",
     "reset",
     "rtl",
     "scoreboard",
-    "source-audit",
+    "rtl-audit",
     "synthesis",
     "systemverilog",
-    "tb-audit",
     "testbench",
-    "thermal",
     "timing",
     "timing-closure",
     "verilog",
@@ -37,8 +33,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "LogicPilot",
-    "shortDescription": "Tool-agnostic RTL/HDL front-end workflow and knowledge skills",
-    "longDescription": "Skills covering design discipline, planning, RTL design, SystemVerilog design/modeling, source and testbench audits, synthesizable coding, reset/RDC, FSM, CDC, constraints, interfaces, simulation, SystemVerilog verification platforms, assertions/coverage/formal, synthesis, power analysis, FPGA architecture optimization/timing closure, gate-level verification, and ASIC implementation, plus a toolchain-agnostic flow driver.",
+    "shortDescription": "Codex-native RTL/HDL design and review skills",
+    "longDescription": "Five focused skills covering RTL and interface design, source audit, reset/CDC/RDC, timing constraints, verification, synthesis, and FPGA optimization without imposing a parallel build system.",
     "developerName": "LogicPilot Maintainers",
     "category": "Productivity",
     "capabilities": [
@@ -46,9 +42,9 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Run LogicPilot doctor on this HDL project.",
       "Audit this RTL with LogicPilot and explain the findings.",
-      "Set up a LogicPilot flow.toml for this hardware block."
+      "Review this design's clock and reset crossings with LogicPilot.",
+      "Analyze this synthesis report and propose a measured RTL improvement."
     ]
   }
 }

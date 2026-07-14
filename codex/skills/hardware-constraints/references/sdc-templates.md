@@ -1,8 +1,7 @@
 # SDC / XDC templates — pasteable snippets
 
-Vendor-checked snippets for the constraints that go wrong most often.
-Three columns per pattern: **open** (yosys + nextpnr + OpenSTA / Quartus
-.sdc), **Xilinx** (Vivado .xdc), **Intel** (Quartus .sdc / .qsf hints).
+Vendor-oriented snippets for the constraints that go wrong most often.
+The examples cover generic SDC, Xilinx Vivado XDC, and Intel Quartus SDC.
 The semantics are the same; the syntax has small but real differences.
 
 When two cells look identical, they ARE identical for that pattern.
@@ -45,8 +44,8 @@ transfers.
 
 ```tcl
 # All three vendors — same syntax.
-# Required when crossings exist; STA otherwise tries to close timing
-# on the (correctly) async paths and fails.
+# Use only when every path between the groups is intentionally untimed.
+# Do not use this blanket exception for a bounded CDC data path.
 set_clock_groups -asynchronous \
     -group {clk_a clk_a_div2} \
     -group {clk_b}
@@ -59,16 +58,17 @@ clock and its divider are one group). Different groups are async.
 
 ```tcl
 # All three vendors — same syntax.
-# Bound a multi-bit CDC bus to one source-clock period so multi-bit
-# captures stay coherent through the synchronizer.
-set_max_delay <SRC_PERIOD_NS> \
+# Preserve the protocol's physical delay/skew assumption. Derive the
+# bound from the source stability contract and target tool semantics.
+set_max_delay <BOUND_NS> \
     -from [get_cells {src_dom/data_reg[*]}] \
     -to   [get_cells dst_dom/u_sync/rff1]
 ```
 
 Use this for "MCP formulation" (data held stable on the source side,
-enable synchronized) crossings. `<SRC_PERIOD_NS>` is the source-clock
-period — substitute the literal number.
+enable synchronized) crossings. Add the target tool's bus-skew constraint for
+Gray-coded or coherency-sensitive buses, and verify both constraints in its
+exception/skew reports.
 
 ## 6. False path (for genuinely async, not "to silence")
 
@@ -98,30 +98,16 @@ set_multicycle_path 3 -hold  -from [get_cells slow_src_reg] -to [get_cells slow_
 
 For an N-cycle setup multicycle, hold = N - 1. Always write both.
 
-## 8. nextpnr .pcf (pin map, no timing)
-
-```text
-# nextpnr-ice40 example — pin assignment only; timing goes in a
-# matching .sdc passed to nextpnr via --pre-pack or to OpenSTA.
-set_io clk_sys 35
-set_io data_in[0] 36
-set_io data_in[1] 37
-set_io rst_n 47
-```
-
-`.pcf` files do NOT carry timing. Pair with a `.sdc` file for
-`create_clock` etc.
-
 ## Common mistakes to scan for
 
 | Mistake | Symptom | Fix |
 |---|---|---|
 | Forgot `create_clock` | Tool reports "no clock" → no timing → `fmax_mhz` missing | Always start with `create_clock` for every primary clock |
-| `set_clock_groups` after a `set_false_path` on the same pair | False path silently ignored | Use one or the other, not both |
+| Blanket `set_clock_groups` plus a bounded path on the same clock pair | Bound may be disabled by exception precedence | Use one matching strategy per path and inspect the exception report |
 | `set_max_delay` without `-from` / `-to` | Applies to wrong paths or to all of them | Always scope with `-from` and `-to` |
 | Setup-only multicycle | Hold violation in silicon | Add `-hold N-1` alongside `-setup N` |
 | Wildcard `set_false_path -from * -to *` | "Closes" timing by ignoring real bugs | Each false path needs a named architectural reason |
 | `derive_pll_clocks` in non-Intel flow | Tool error or silent no-op | Use explicit `create_generated_clock` |
 
-For tool-level waiver management (CDC tool violations), see
-`hardware-cdc/references/cdc-tool-waiver.md`.
+For tool-level violation waivers, read `references/cdc-tool-waiver.md` in the
+`hardware-cdc` skill.

@@ -1,8 +1,7 @@
-# SDC / XDC / PCF cookbook
+# SDC / XDC cookbook
 
-Concrete constraint patterns. SDC (`.sdc`, Quartus/open) and XDC (`.xdc`,
-Vivado) share these Tcl commands; differences are noted. `.pcf` (nextpnr/ice40)
-is pin-only — see the bottom.
+Concrete timing-constraint patterns. SDC (`.sdc`) and XDC (`.xdc`) share these
+Tcl commands; vendor differences are noted.
 
 ## Clocks
 
@@ -48,7 +47,7 @@ internal (reg-to-reg) timing still works, but board interfaces are unconstrained
 ## Timing exceptions
 
 ```tcl
-# Two clocks are mutually asynchronous (covers all paths between them):
+# Two clocks are mutually asynchronous and every path between them is untimed:
 set_clock_groups -asynchronous -group {sys_clk} -group {usb_clk}
 
 # A single async crossing (synchronizer first stage / static config):
@@ -58,14 +57,26 @@ set_false_path -from [get_clocks usb_clk] -to [get_pins sync_meta_reg/d]
 set_multicycle_path -setup 4 -from [get_pins src_reg/q] -to [get_pins dst_reg/d]
 set_multicycle_path -hold  3 -from [get_pins src_reg/q] -to [get_pins dst_reg/d]
 
-# Bound the skew on a multi-bit CDC data bus captured by a synced enable,
-# instead of a blanket false path:
+# Bound a multi-bit CDC data bus captured by a synchronized enable.
+# Exact options and object types are tool-specific.
 set_max_delay 8.0 -from [get_pins data_src_reg*/q] -to [get_pins data_dst_reg*/d]
+set_bus_skew 8.0 -from [get_pins data_src_reg*/q] -to [get_pins data_dst_reg*/d]
 ```
 
 Rule of thumb: `hold` multicycle = `setup` multicycle − 1. Prefer
 `set_clock_groups -asynchronous` over many `set_false_path`s for whole-domain
-async relationships.
+async relationships only when no path between those groups needs a bounded
+max-delay or bus-skew check. False-path-style exceptions normally take
+precedence over bounded timing exceptions; confirm the effective result with
+the target tool's exception report.
+
+Choose by crossing contract:
+
+| Crossing contract | Timing strategy |
+|---|---|
+| Unrelated domains with intentionally untimed synchronizer inputs | Async clock group or narrowly scoped false path |
+| Held bundled data or Gray-coded bus with a physical skew assumption | Scoped max-delay and/or bus-skew check |
+| Synchronous clock-enable path that receives multiple cycles | Setup/hold multicycle pair |
 
 ## Common mistakes
 
@@ -73,20 +84,9 @@ async relationships.
 - False-pathing a **real** synchronous path to pass timing — hides a bug.
 - Forgetting to declare two clocks asynchronous, so STA reports thousands of
   false CDC violations (or worse, tries to "close" them).
+- Applying a blanket asynchronous clock group to a bounded CDC bus, so the
+  path-specific max-delay or skew requirement is no longer enforced.
 - Putting a derived/gated clock on global routing and getting hold violations —
   use a clock enable instead.
 - Letting alphabetical file ordering apply constraints before the objects exist
   — load the design, then the constraints.
-
-## `.pcf` (nextpnr / ice40) — pins only
-
-```
-set_io clk    35
-set_io din[0] 23
-set_io dout   16
-```
-
-`.pcf` assigns package pins; it carries **no timing**. The clock frequency
-target for nextpnr is given separately (e.g. a frequency goal passed to the
-tool, or a small `.sdc` if the flow supports one). Pin assignment and timing
-constraint are separate concerns here.

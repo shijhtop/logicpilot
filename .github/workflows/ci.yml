@@ -5,16 +5,12 @@ on:
   pull_request:
 
 jobs:
-  python-tests:
-    name: Python tests (${{ matrix.os }}, ${{ matrix.python-version }})
+  tests:
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
-        # macos-latest is ARM64 (Apple Silicon) on GitHub Actions since 2024.
-        # If Intel macOS coverage becomes a requirement, add `macos-13` here
-        # (see roadmap §12 Q10). v0.7a deliberately ships ARM64 only.
         os: [ubuntu-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
 
@@ -27,28 +23,21 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Install test dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install pytest tomli
+      - name: Install pytest
+        run: python -m pip install pytest
 
-      - name: Run flow unit tests
-        run: |
-          python -m pytest shared/flow/tests -q
-
-      - name: Run skill pressure-test static layer
-        run: |
-          python -m pytest shared/skill_tests -q
+      - name: Run tests
+        run: python -m pytest tests -q
 
   package-check:
-    name: Package cleanliness and syntax
+    name: Package structure and syntax
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: No accidental junk files
+      - name: No generated files
         run: |
           set -euo pipefail
           junk="$(find . \
@@ -60,167 +49,53 @@ jobs:
             -name '.venv' -o \
             -name 'venv' \
           )"
-          if [ -n "$junk" ]; then
-            echo "$junk"
-            exit 1
-          fi
+          test -z "$junk" || { echo "$junk"; exit 1; }
 
       - name: Python syntax
-        run: |
-          python -m compileall -q shared/flow
-          python -m compileall -q shared/skill_tests
-          python -m compileall -q claude-code/plugins/logicpilot/scripts
-          python -m py_compile install.py sync_package.py sync_skills.py
+        run: python -m compileall -q codex/skills tests
 
-      - name: Codex plugin manifest
+      - name: Codex package contract
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
 
-          manifest = json.loads(Path("codex/.codex-plugin/plugin.json").read_text())
+          root = Path.cwd()
+          plugin = root / "codex"
+          manifest = json.loads(
+              (plugin / ".codex-plugin" / "plugin.json").read_text()
+          )
+          marketplace = json.loads(
+              (root / ".agents" / "plugins" / "marketplace.json").read_text()
+          )
+          skills = sorted((plugin / "skills").glob("*/SKILL.md"))
+          if len(skills) != 5:
+              raise SystemExit(f"expected 5 skills, found {len(skills)}")
+          if (plugin / "flow").exists() or (plugin / "AGENTS.md").exists():
+              raise SystemExit("plugin must remain skills-first")
+          if any((skill.parent / "scripts").exists() for skill in skills):
+              raise SystemExit("plugin skills must not bundle heuristic HDL scanners")
+          entries = [
+              entry for entry in marketplace["plugins"]
+              if entry["name"] == manifest["name"]
+          ]
+          if len(entries) != 1:
+              raise SystemExit("marketplace must contain exactly one manifest entry")
+          source = entries[0]["source"]
+          if source["source"] != "local":
+              raise SystemExit("marketplace source must be local")
+          if (root / source["path"]).resolve() != plugin.resolve():
+              raise SystemExit("marketplace source path does not resolve to plugin")
+          for skill in skills:
+              lines = skill.read_text().splitlines()
+              if len(lines) < 5 or lines[0] != "---" or lines[1] != f"name: {skill.parent.name}":
+                  raise SystemExit(f"invalid skill frontmatter: {skill}")
+              if not (skill.parent / "agents" / "openai.yaml").is_file():
+                  raise SystemExit(f"missing Codex metadata: {skill.parent}")
           prompts = manifest["interface"].get("defaultPrompt")
           if not isinstance(prompts, list) or not 1 <= len(prompts) <= 3:
-              raise SystemExit("codex manifest requires 1-3 interface.defaultPrompt entries")
+              raise SystemExit("manifest requires 1-3 default prompts")
           for prompt in prompts:
-              if not isinstance(prompt, str) or not prompt or len(prompt) > 128:
-                  raise SystemExit("each defaultPrompt must be a non-empty string up to 128 chars")
+              if not isinstance(prompt, str) or not 0 < len(prompt) <= 128:
+                  raise SystemExit("invalid default prompt")
           PY
-
-      - name: Mirrored flow files are in sync
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import filecmp
-
-          roots = [
-              Path("shared/flow"),
-              Path("codex/flow"),
-              Path("claude-code/plugins/logicpilot/flow"),
-          ]
-
-          def files(root):
-              return sorted(
-                  p.relative_to(root)
-                  for p in root.rglob("*")
-                  if p.is_file() and "__pycache__" not in p.parts
-              )
-
-          baseline = files(roots[0])
-          ok = True
-          for root in roots[1:]:
-              current = files(root)
-              if current != baseline:
-                  print(f"file list mismatch: {root}")
-                  print("missing:", sorted(set(baseline) - set(current)))
-                  print("extra:", sorted(set(current) - set(baseline)))
-                  ok = False
-                  continue
-              for rel in baseline:
-                  if not filecmp.cmp(roots[0] / rel, root / rel, shallow=False):
-                      print(f"content mismatch: {rel} in {root}")
-                      ok = False
-          raise SystemExit(0 if ok else 1)
-          PY
-
-      - name: sync_package.py drift check
-        run: |
-          python sync_package.py
-          if ! git diff --exit-code; then
-            echo ""
-            echo "ERROR: sync_package.py produced changes that were not committed."
-            echo "Run 'python sync_package.py' locally and commit the result."
-            exit 1
-          fi
-
-  e2e-oss-cad:
-    # End-to-end run of the demo-cdc project on real open-source EDA tools
-    # (iverilog/verilator/yosys/sby from OSS CAD Suite). Catches runner /
-    # scheduler / config drift that mock-fixture unit tests can't, plus
-    # vendor-format drift after toolchain upgrades. Commercial tools
-    # (Vivado / Quartus / VCS / JG / VCF) are never installed here — that
-    # class of regression is covered by golden-log fixtures.
-    name: End-to-end demo-cdc on OSS CAD Suite
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install pytest
-        run: python -m pip install --upgrade pip pytest tomli
-
-      - name: Cache OSS CAD Suite
-        id: cache-oss
-        uses: actions/cache@v4
-        with:
-          # Bump this date deliberately to pull a newer OSS CAD Suite — that's
-          # exactly when you want to surface vendor-format drift.
-          key: oss-cad-suite-2025-09-01-linux-x64
-          path: ~/oss-cad-suite
-
-      - name: Download OSS CAD Suite
-        if: steps.cache-oss.outputs.cache-hit != 'true'
-        run: |
-          set -euo pipefail
-          cd "$HOME"
-          tag="2025-09-01"
-          datestamp="$(echo "$tag" | tr -d '-')"
-          url="https://github.com/YosysHQ/oss-cad-suite-build/releases/download/${tag}/oss-cad-suite-linux-x64-${datestamp}.tgz"
-          echo "Downloading $url"
-          curl -fL -o oss-cad-suite.tgz "$url"
-          tar -xf oss-cad-suite.tgz
-          rm oss-cad-suite.tgz
-
-      - name: Show tool versions
-        run: |
-          export PATH="$HOME/oss-cad-suite/bin:$PATH"
-          iverilog -V 2>&1 | head -1
-          yosys -V 2>&1 | head -1
-          verilator -V 2>&1 | head -1
-          sby --help 2>&1 | head -1 || true
-
-      - name: Run demo-cdc full pipeline
-        run: |
-          set -euo pipefail
-          export PATH="$HOME/oss-cad-suite/bin:$PATH"
-          cd shared/flow/demo-cdc
-          # Exit code 1 = a stage reported fail/blocked (normal for a demo that shows
-          # CDC violations). Exit code > 1 = infra error (crash, missing config, etc.).
-          python3 ../logicpilot.py all --config flow.toml > /tmp/result.json || lp_exit=$?
-          if [ "${lp_exit:-0}" -gt 1 ]; then exit "${lp_exit:-1}"; fi
-          python3 -c "import json; d=json.load(open('/tmp/result.json')); [print(f'  {s[\"stage\"]:12} → {s[\"status\"]:8} ({s.get(\"tool\",\"-\")})') for s in d['results']]; print('overall:', d.get('overall'))"
-
-      - name: Assert every stage passed
-        run: |
-          python3 - <<'PY'
-          import json, sys
-          with open("/tmp/result.json") as f:
-              d = json.load(f)
-          # cdc-check returning "fail" means the tool ran and found CDC violations.
-          # That is correct behaviour for a multi-clock demo; it is NOT an infra failure.
-          # Every other stage must be pass/skipped.
-          fails = [
-              s for s in d["results"]
-              if s["status"] not in ("pass", "skipped")
-              and not (s["stage"] == "cdc-check" and s["status"] == "fail")
-          ]
-          if fails:
-              for s in fails:
-                  reason = s.get("reason") or (s.get("tail","")[:200] if s.get("tail") else "(no reason)")
-                  print(f"FAIL {s['stage']}: status={s['status']} — {reason}")
-              sys.exit(1)
-          print(f"OK: {len(d['results'])} stages passed/skipped/cdc-found-violations; overall={d.get('overall')}")
-          PY
-
-      - name: Upload envelope on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: e2e-envelope
-          path: /tmp/result.json

@@ -1,5 +1,4 @@
 interface:
-  display_name: "Hardware Verification Knowledge"
-  short_description: "Reference: testbench, assertions, formal, coverage"
-policy:
-  allow_implicit_invocation: true
+  display_name: "Hardware Verification"
+  short_description: "Build self-checking HDL verification"
+  default_prompt: "Use $hardware-verification to create a self-checking verification plan for this design."
